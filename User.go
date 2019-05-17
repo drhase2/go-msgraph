@@ -53,6 +53,23 @@ func (u User) ListCalendars() (Calendars, error) {
 	return marsh.Calendars, err
 }
 
+// create a calendar with this user. The "name" of the calendar must be given
+func (u User) CreateCalendar(name string) (*Calendar, error) {
+	if u.graphClient == nil {
+		return nil, ErrNotGraphClientSourced
+	}
+	resource := fmt.Sprintf("/users/%v/calendars", u.ID)
+
+	var marsh struct {
+		name string `json:"name"`
+	}
+	marsh.name = name
+	var result Calendar
+	err := u.graphClient.makePOSTAPICall(resource, nil, marsh, &result)
+	result.setGraphClient(u.graphClient)
+	return &result, err
+}
+
 // ListCalendarView returns the CalendarEvents of the given user within the specified
 // start- and endDateTime. The calendar used is the default calendar of the user.
 // Returns an error if the user it not GraphClient sourced or if there is any error

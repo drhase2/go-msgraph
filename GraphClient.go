@@ -125,6 +125,50 @@ func (g *GraphClient) makeGETAPICall(apicall string, getParams url.Values, v int
 	return g.performRequest(req, v)
 }
 
+// makeGETAPICall performs an API-Call to the msgraph API. This func uses sync.Mutex to synchronize all API-calls
+func (g *GraphClient) makePOSTAPICall(apicall string, postParams url.Values, obj interface{}, v interface{}) error {
+	g.apiCall.Lock()
+	defer g.apiCall.Unlock() // unlock when the func returns
+	// Check token
+	if g.token.WantsToBeRefreshed() { // Token not valid anymore?
+		err := g.refreshToken()
+		if err != nil {
+			return err
+		}
+	}
+
+	reqURL, err := url.ParseRequestURI(BaseURL)
+	if err != nil {
+		return fmt.Errorf("Unable to parse URI %v: %v", BaseURL, err)
+	}
+
+	// Add Version to API-Call, the leading slash is always added by the calling func
+	reqURL.Path = "/" + APIVersion + apicall
+
+	buffer, err := json.Marshal(obj)
+	if err != nil {
+		return fmt.Errorf("Unable to marshal Object %v: %v", obj, err)
+	}
+	req, err := http.NewRequest("POST", reqURL.String(), bytes.NewReader(buffer))
+	if err != nil {
+		return fmt.Errorf("HTTP request error: %v", err)
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", g.token.GetAccessToken())
+
+	if postParams == nil { // initialize getParams if it's nil
+		postParams = url.Values{}
+	}
+
+	// TODO: Improve performance with using $skip & paging instead of retrieving all results with $top
+	// TODO: MaxPageSize is currently 999, if there are any time more than 999 entries this will make the program unpredictable... hence start to use paging (!)
+	postParams.Add("$top", strconv.Itoa(MaxPageSize))
+	req.URL.RawQuery = postParams.Encode() // set query parameters
+
+	return g.performRequest(req, v)
+}
+
 // performRequest performs a pre-prepared http.Request and does the proper error-handling for it.
 // does a json.Unmarshal into the v interface{} and returns the error of it if everything went well so far.
 func (g *GraphClient) performRequest(req *http.Request, v interface{}) error {
